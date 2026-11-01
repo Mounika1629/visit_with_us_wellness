@@ -1,0 +1,7 @@
+# Dependencies used by the GitHub Actions pipeline (data registration, preparation, training).
+# Versions are pinned so the saved model is built with the same libraries the Streamlit app loads it with.
+pandas==2.2.3
+numpy==1.26.4
+scikit-learn==1.5.2
+joblib==1.4.2
+mlflow==3.0.1
