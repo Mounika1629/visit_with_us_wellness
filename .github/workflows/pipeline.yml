@@ -1,0 +1,97 @@
+name: Tourism Project Pipeline
+
+on:
+  push:
+    branches:
+      - main  # Automatically triggers on push to the main branch
+  workflow_dispatch:  # lets you click "Run workflow" in the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:            # if several pushes arrive together, only the newest run continues
+  group: tourism-pipeline
+  cancel-in-progress: true
+
+jobs:
+
+  register-dataset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: tourism_project/requirements.txt
+      - name: Install Dependencies
+        run: pip install -r tourism_project/requirements.txt
+      - name: Register Dataset
+        run: python tourism_project/model_building/data_register.py
+      - name: Upload Registered Dataset
+        uses: actions/upload-artifact@v4
+        with:
+          name: registered-data
+          path: tourism_project/data/tourism.csv
+
+  data-prep:
+    needs: register-dataset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: tourism_project/requirements.txt
+      - name: Install Dependencies
+        run: pip install -r tourism_project/requirements.txt
+      - name: Run Data Preparation
+        run: python tourism_project/model_building/prep.py
+      - name: Upload Train Test Splits
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-splits
+          path: |
+            Xtrain.csv
+            Xtest.csv
+            ytrain.csv
+            ytest.csv
+
+  model-training:
+    needs: data-prep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: tourism_project/requirements.txt
+      - name: Install Dependencies
+        run: pip install -r tourism_project/requirements.txt
+      - name: Download Train Test Splits
+        uses: actions/download-artifact@v4
+        with:
+          name: data-splits
+      - name: Start MLflow Server
+        run: |
+          nohup mlflow ui --host 0.0.0.0 --port 5000 > mlflow_server.log 2>&1 &  # Run MLflow UI in the background
+          for i in $(seq 1 30); do curl -sf http://localhost:5000/health && break; sleep 2; done  # Wait until the server answers
+      - name: Model Building
+        run: python tourism_project/model_building/train.py
+      - name: Upload MLflow Experiment Runs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-runs
+          path: mlruns
+          if-no-files-found: ignore
+      - name: Commit Trained Model
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tourism_project/deployment/best_tourism_model_v1.joblib   # path to the saved model file
+          git commit -m "Add trained model [skip ci]" || echo "No changes to commit"
+          git pull --rebase origin main
+          git push origin HEAD:main
