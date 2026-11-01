@@ -1,0 +1,7 @@
+# Dependencies of the Streamlit app (Streamlit Community Cloud installs this file; use Python 3.11).
+# scikit-learn / numpy / pandas / joblib must match tourism_project/requirements.txt so the model loads correctly.
+streamlit==1.41.1
+pandas==2.2.3
+numpy==1.26.4
+scikit-learn==1.5.2
+joblib==1.4.2
